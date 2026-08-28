@@ -8,7 +8,7 @@ const cors = require("cors");
 
 // Connect to MongoDB
 const app = express();
-const PORT = process.env.PORT || 8000;
+const PORT = process.env.PORT || 8045;
 
 // Middleware
 app.use(cors({ origin: "*" }));
