@@ -59,7 +59,7 @@ exports.createOrder = async (req, res) => {
       }
     }
 
-    const shippingCharge = subtotal >= 999 ? 0 : 99;
+    const shippingCharge = subtotal >= 999 ? 0 : 0;
 
     const total =
       subtotal -
