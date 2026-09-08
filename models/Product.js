@@ -14,20 +14,14 @@ const productSchema = new mongoose.Schema(
       required: true,
     },
 
+    shortDescription: {
+      type: String,
+      default: "",
+    },
+
     description: {
       type: String,
       required: true,
-    },
-
-    // category: {
-    //   type: mongoose.Schema.Types.ObjectId,
-    //   ref: "Category",
-    //   required: true,
-    // },
-
-    brand: {
-      type: String,
-      default: "",
     },
 
     images: [
@@ -56,9 +50,14 @@ const productSchema = new mongoose.Schema(
         type: String,
       },
     ],
-    sku: {
+    benefits: [
+      {
+        type: String,
+      },
+    ],
+    howToUse: {
       type: String,
-      unique: true,
+      default: "",
     },
 
     ingredients: {
@@ -66,29 +65,8 @@ const productSchema = new mongoose.Schema(
       default: "",
     },
 
-    benefits: [
-      {
-        type: String,
-      },
-    ],
-
-    howToUse: {
-      type: String,
-      default: "",
-    },
-
-    skinType: [
-      {
-        type: String,
-      },
-    ],
-
-    tags: [
-      {
-        type: String,
-      },
-    ],
-
+    // Maintained automatically by the review system (see reviewController) —
+    // don't set these directly from the admin form.
     rating: {
       type: Number,
       default: 0,

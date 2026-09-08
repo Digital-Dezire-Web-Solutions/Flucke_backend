@@ -47,18 +47,18 @@ const orderSchema = new mongoose.Schema(
 
     paymentMethod: {
       type: String,
-      enum: ["COD", "Razorpay", "Stripe"],
+      enum: ["COD", "Razorpay"],
       default: "COD",
     },
 
     paymentStatus: {
       type: String,
-      enum: ["Pending", "Paid", "Failed", "Refunded"],
+      enum: ["Pending", "Paid", "Failed"],
       default: "Pending",
     },
-
+    razorpayOrderId: String,
+    razorpayPaymentId: String,
     subtotal: Number,
-
     discount: {
       type: Number,
       default: 0,
@@ -98,7 +98,7 @@ const orderSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 module.exports = mongoose.model("Order", orderSchema);

@@ -1,16 +1,13 @@
 const Order = require("../models/Order");
 const Product = require("../models/Product");
 const Coupon = require("../models/Coupon");
+const crypto = require("crypto");
+const razorpay = require("../config/razorpay");
 
 // Create Order
 exports.createOrder = async (req, res) => {
   try {
-    const {
-      products,
-      shippingAddress,
-      paymentMethod,
-      couponCode,
-    } = req.body;
+    const { products, shippingAddress, paymentMethod, couponCode } = req.body;
 
     let subtotal = 0;
 
@@ -24,9 +21,10 @@ exports.createOrder = async (req, res) => {
         });
       }
 
-      subtotal += product.salePrice > 0
-        ? product.salePrice * item.quantity
-        : product.price * item.quantity;
+      subtotal +=
+        product.salePrice > 0
+          ? product.salePrice * item.quantity
+          : product.price * item.quantity;
     }
 
     let discount = 0;
@@ -42,12 +40,9 @@ exports.createOrder = async (req, res) => {
         couponId = coupon._id;
 
         if (coupon.discountType === "percentage") {
-          discount = subtotal * coupon.discountValue / 100;
+          discount = (subtotal * coupon.discountValue) / 100;
 
-          if (
-            coupon.maximumDiscount &&
-            discount > coupon.maximumDiscount
-          ) {
+          if (coupon.maximumDiscount && discount > coupon.maximumDiscount) {
             discount = coupon.maximumDiscount;
           }
         } else {
@@ -61,15 +56,10 @@ exports.createOrder = async (req, res) => {
 
     const shippingCharge = subtotal >= 999 ? 0 : 0;
 
-    const total =
-      subtotal -
-      discount +
-      shippingCharge;
+    const total = subtotal - discount + shippingCharge;
 
     const order = await Order.create({
-      orderNumber:
-        "ORD" +
-        Date.now(),
+      orderNumber: "ORD" + Date.now(),
 
       user: req.user._id,
 
@@ -209,9 +199,7 @@ exports.updateOrderStatus = async (req, res) => {
 // Delete Order
 exports.deleteOrder = async (req, res) => {
   try {
-    const order = await Order.findByIdAndDelete(
-      req.params.id
-    );
+    const order = await Order.findByIdAndDelete(req.params.id);
 
     if (!order) {
       return res.status(404).json({
@@ -223,6 +211,115 @@ exports.deleteOrder = async (req, res) => {
     res.json({
       success: true,
       message: "Order deleted",
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+exports.createRazorpayOrder = async (req, res) => {
+  try {
+    const { amount } = req.body;
+
+    const options = {
+      amount: Math.round(amount * 100),
+      currency: "INR",
+      receipt: "receipt_" + Date.now(),
+    };
+
+    const order = await razorpay.orders.create(options);
+
+    res.json({
+      success: true,
+      order,
+      key: process.env.RAZORPAY_KEY_ID,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+exports.verifyRazorpayPayment = async (req, res) => {
+  try {
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      orderData,
+    } = req.body;
+
+    const generatedSignature = crypto
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+      .update(razorpay_order_id + "|" + razorpay_payment_id)
+      .digest("hex");
+
+    if (generatedSignature !== razorpay_signature) {
+      return res.status(400).json({
+        success: false,
+        message: "Payment verification failed",
+      });
+    }
+    let subtotal = 0;
+    for (const item of orderData.products) {
+      const product = await Product.findById(item.product);
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          message: "Product not found",
+        });
+      }
+      subtotal +=
+        (product.salePrice > 0 ? product.salePrice : product.price) *
+        item.quantity;
+    }
+    let discount = 0;
+    let couponId = null;
+    if (orderData.couponCode) {
+      const coupon = await Coupon.findOne({
+        code: orderData.couponCode.toUpperCase(),
+        active: true,
+      });
+      if (coupon && coupon.expiryDate > new Date()) {
+        couponId = coupon._id;
+        if (coupon.discountType === "percentage") {
+          discount = (subtotal * coupon.discountValue) / 100;
+          if (coupon.maximumDiscount && discount > coupon.maximumDiscount) {
+            discount = coupon.maximumDiscount;
+          }
+        } else {
+          discount = coupon.discountValue;
+        }
+        coupon.usedCount += 1;
+        await coupon.save();
+      }
+    }
+    const shippingCharge = subtotal >= 999 ? 0 : 0;
+    const total = subtotal - discount + shippingCharge;
+    const order = await Order.create({
+      orderNumber: "ORD" + Date.now(),
+      user: req.user._id,
+      products: orderData.products,
+      shippingAddress: orderData.shippingAddress,
+      paymentMethod: "Razorpay",
+      paymentStatus: "Paid",
+      razorpayOrderId: razorpay_order_id,
+      razorpayPaymentId: razorpay_payment_id,
+      subtotal,
+      discount,
+      shippingCharge,
+      total,
+      coupon: couponId,
+    });
+
+    res.json({
+      success: true,
+      order,
     });
   } catch (err) {
     res.status(500).json({
