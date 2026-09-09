@@ -3,6 +3,16 @@ const Product = require("../models/Product");
 const Coupon = require("../models/Coupon");
 const crypto = require("crypto");
 const razorpay = require("../config/razorpay");
+const sendEmail = require("../utils/sendEmail");
+
+const STATUS_MESSAGES = {
+  Pending: "Your order has been placed and is waiting for confirmation.",
+  Confirmed: "Your order has been confirmed and is being prepared.",
+  Packed: "Your order has been packed and is ready for dispatch.",
+  Shipped: "Your order is on its way!",
+  Delivered: "Your order has been delivered. We hope you love it!",
+  Cancelled: "Your order has been cancelled. We will initiate your payment within 24hrs",
+};
 
 // Create Order
 exports.createOrder = async (req, res) => {
@@ -164,9 +174,12 @@ exports.getOrder = async (req, res) => {
 // Update Order Status
 exports.updateOrderStatus = async (req, res) => {
   try {
-    const { orderStatus } = req.body;
+    const { orderStatus, orderNote } = req.body;
 
-    const order = await Order.findById(req.params.id);
+    const order = await Order.findById(req.params.id).populate(
+      "user",
+      "firstName lastName email",
+    );
 
     if (!order) {
       return res.status(404).json({
@@ -176,12 +189,35 @@ exports.updateOrderStatus = async (req, res) => {
     }
 
     order.orderStatus = orderStatus;
+    if (orderNote !== undefined) order.orderNote = orderNote;
 
     if (orderStatus === "Delivered") {
       order.deliveredAt = new Date();
     }
 
     await order.save();
+    // A failed email shouldn't roll back or fail the status update itself —
+    // the order state change is the important part, the email is a courtesy.
+    if (order.user?.email) {
+      try {
+        await sendEmail({
+          to: order.user.email,
+          cc: process.env.SMTP_USER,
+          subject: `Order ${order.orderNumber} — ${orderStatus}`,
+          html: `
+            <p>Hi ${order.user.name || "there"},</p>
+            <p>${
+              STATUS_MESSAGES[orderStatus] ||
+              `Your order status has been updated to ${orderStatus}.`
+            }</p>
+            ${order.orderNote ? `<p>Note from us: ${order.orderNote}</p>` : ""}
+            <p>Order number: <strong>${order.orderNumber}</strong></p>
+          `,
+        });
+      } catch (mailErr) {
+        console.error("Order status email failed:", mailErr.message);
+      }
+    }
 
     res.json({
       success: true,
@@ -238,7 +274,7 @@ exports.createRazorpayOrder = async (req, res) => {
       key: process.env.RAZORPAY_KEY_ID,
     });
   } catch (err) {
-    console.log(err)
+    console.log(err);
     res.status(500).json({
       success: false,
       message: err.message,

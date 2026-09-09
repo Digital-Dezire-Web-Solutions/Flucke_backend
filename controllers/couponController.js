@@ -12,6 +12,7 @@ exports.createCoupon = async (req, res) => {
       maximumDiscount,
       usageLimit,
       expiryDate,
+      offerText
     } = req.body;
 
     const exists = await Coupon.findOne({
@@ -34,6 +35,7 @@ exports.createCoupon = async (req, res) => {
       maximumDiscount,
       usageLimit,
       expiryDate,
+      offerText
     });
 
     res.status(201).json({

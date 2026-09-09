@@ -55,10 +55,13 @@ const couponSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    offerText: {
+      type: String,
+    },
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 module.exports = mongoose.model("Coupon", couponSchema);

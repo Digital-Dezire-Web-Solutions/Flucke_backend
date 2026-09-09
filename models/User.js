@@ -73,6 +73,15 @@ const userSchema = new mongoose.Schema(
     ],
 
     addresses: [addressSchema],
+
+    resetPasswordOtp: {
+      type: String,
+      select: false,
+    },
+    resetPasswordOtpExpiry: {
+      type: Date,
+      select: false,
+    },
   },
   {
     timestamps: true,

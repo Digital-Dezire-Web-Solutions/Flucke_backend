@@ -1,6 +1,15 @@
 const User = require("../models/User");
 const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
 const generateToken = require("../utils/generateToken");
+const sendEmail = require("../utils/sendEmail");
+
+const OTP_EXPIRY_MINUTES = 10;
+
+function generateOtp() {
+  // 6-digit code, cryptographically random rather than Math.random().
+  return String(crypto.randomInt(100000, 1000000));
+}
 
 // Register
 exports.signup = async (req, res) => {
@@ -76,6 +85,133 @@ exports.login = async (req, res) => {
       success: true,
       token: generateToken(user._id),
       user,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// Step 1 of forgot-password: email the user a 6-digit OTP.
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required.",
+      });
+    }
+
+    const user = await User.findOne({ email });
+
+    // Respond the same way whether or not the account exists — otherwise
+    // this endpoint becomes a way to check which emails are registered.
+    if (!user) {
+      return res.json({
+        success: true,
+        message: "If that email is registered, a code has been sent.",
+      });
+    }
+
+    const otp = generateOtp();
+    user.resetPasswordOtp = await bcrypt.hash(otp, 10);
+    user.resetPasswordOtpExpiry = new Date(
+      Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000,
+    );
+    await user.save();
+
+    try {
+      await sendEmail({
+        to: user.email,
+        subject: "Your password reset code",
+        html: `
+          <p>Hi ${user.name || "there"},</p>
+          <p>Your password reset code is:</p>
+          <h2 style="letter-spacing:4px;">${otp}</h2>
+          <p>This code expires in ${OTP_EXPIRY_MINUTES} minutes. If you didn't request this, you can safely ignore this email.</p>
+        `,
+      });
+    } catch (mailErr) {
+      console.error("Forgot-password email failed:", mailErr.message);
+      return res.status(500).json({
+        success: false,
+        message: "Could not send the reset email. Please try again shortly.",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "If that email is registered, a code has been sent.",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// Step 2 of forgot-password: verify the OTP and set a new password.
+exports.resetPassword = async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Email, code, and new password are all required.",
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be at least 6 characters.",
+      });
+    }
+
+    const user = await User.findOne({ email }).select(
+      "+resetPasswordOtp +resetPasswordOtpExpiry",
+    );
+
+    if (!user || !user.resetPasswordOtp || !user.resetPasswordOtpExpiry) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired code. Please request a new one.",
+      });
+    }
+
+    if (user.resetPasswordOtpExpiry < new Date()) {
+      user.resetPasswordOtp = undefined;
+      user.resetPasswordOtpExpiry = undefined;
+      await user.save();
+      return res.status(400).json({
+        success: false,
+        message: "This code has expired. Please request a new one.",
+      });
+    }
+
+    const otpMatches = await bcrypt.compare(otp, user.resetPasswordOtp);
+
+    if (!otpMatches) {
+      return res.status(400).json({
+        success: false,
+        message: "Incorrect code.",
+      });
+    }
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    user.resetPasswordOtp = undefined;
+    user.resetPasswordOtpExpiry = undefined;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: "Password reset successfully. You can now log in.",
     });
   } catch (error) {
     res.status(500).json({

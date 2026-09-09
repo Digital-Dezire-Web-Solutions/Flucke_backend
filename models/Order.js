@@ -89,6 +89,10 @@ const orderSchema = new mongoose.Schema(
       default: "Pending",
     },
 
+    orderNote: {
+      type: String,
+    },
+
     trackingId: {
       type: String,
       default: "",
