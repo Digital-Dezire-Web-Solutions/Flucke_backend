@@ -64,6 +64,10 @@ const productSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    amazonLink: {
+      type: String,
+      default: "",
+    },
 
     // Maintained automatically by the review system (see reviewController) —
     // don't set these directly from the admin form.

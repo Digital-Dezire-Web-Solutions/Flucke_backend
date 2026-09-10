@@ -54,6 +54,7 @@ exports.createProduct = async (req, res) => {
       benefits: parseArrayField(req.body.benefits ?? req.body.benefit),
       howToUse: req.body.howToUse ?? req.body.howtouse ?? "",
       ingredients: req.body.ingredients || "",
+      amazonLink: req.body.amazonLink || "",
       isFeatured: parseBoolean(req.body.isFeatured, false),
       status: parseBoolean(req.body.status, true),
       images: imageUrls,
@@ -139,6 +140,7 @@ exports.updateProduct = async (req, res) => {
       data.howToUse = req.body.howToUse ?? req.body.howtouse;
     }
     if (req.body.ingredients !== undefined) data.ingredients = req.body.ingredients;
+    if (req.body.amazonLink !== undefined) data.amazonLink = req.body.amazonLink;
     if (req.body.isFeatured !== undefined) data.isFeatured = parseBoolean(req.body.isFeatured);
     if (req.body.status !== undefined) data.status = parseBoolean(req.body.status);
 

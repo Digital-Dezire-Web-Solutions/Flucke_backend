@@ -11,8 +11,68 @@ const STATUS_MESSAGES = {
   Packed: "Your order has been packed and is ready for dispatch.",
   Shipped: "Your order is on its way!",
   Delivered: "Your order has been delivered. We hope you love it!",
-  Cancelled: "Your order has been cancelled. We will initiate your payment within 24hrs",
+  Cancelled:
+    "Your order has been cancelled. We will initiate your payment within 24hrs",
 };
+
+async function notifyAdminOfNewOrder(orderId) {
+  try {
+    const order = await Order.findById(orderId)
+      .populate("user", "name email phone")
+      .populate("products.product", "name");
+
+    if (!order) return;
+
+    const addr = order.shippingAddress || {};
+
+    const itemsHtml = order.products
+      .map(
+        (item) =>
+          `<li>${item.product?.name || "Product"} &times; ${item.quantity} — ₹${item.price}</li>`,
+      )
+      .join("");
+
+    await sendEmail({
+      to: process.env.SMTP_USER,
+      subject: `New Order — ${order.orderNumber}`,
+      html: `
+        <p>A new order has been placed.</p>
+ 
+        <p>
+          <strong>Order:</strong> ${order.orderNumber}<br/>
+          <strong>Payment:</strong> ${order.paymentMethod} (${order.paymentStatus})
+        </p>
+ 
+        <h3>Customer</h3>
+        <p>
+          Name: ${addr.fullName || order.user?.name || "—"}<br/>
+          Phone: ${addr.phone || order.user?.phone || "—"}<br/>
+          Email: ${order.user?.email || "—"}
+        </p>
+ 
+        <h3>Shipping Address</h3>
+        <p>
+          ${addr.house ? addr.house + "<br/>" : ""}
+          ${addr.area ? addr.area + "<br/>" : ""}
+          ${addr.city || ""}${addr.state ? ", " + addr.state : ""}<br/>
+          ${addr.country || ""}${addr.pincode ? " - " + addr.pincode : ""}
+        </p>
+ 
+        <h3>Items</h3>
+        <ul>${itemsHtml}</ul>
+ 
+        <p>
+          Subtotal: ₹${order.subtotal}<br/>
+          Discount: ₹${order.discount || 0}<br/>
+          Shipping: ₹${order.shippingCharge || 0}<br/>
+          <strong>Total: ₹${order.total}</strong>
+        </p>
+      `,
+    });
+  } catch (mailErr) {
+    console.error("New-order admin email failed:", mailErr.message);
+  }
+}
 
 // Create Order
 exports.createOrder = async (req, res) => {
@@ -89,6 +149,7 @@ exports.createOrder = async (req, res) => {
 
       coupon: couponId,
     });
+    await notifyAdminOfNewOrder(order._id);
 
     res.status(201).json({
       success: true,
@@ -202,7 +263,6 @@ exports.updateOrderStatus = async (req, res) => {
       try {
         await sendEmail({
           to: order.user.email,
-          cc: process.env.SMTP_USER,
           subject: `Order ${order.orderNumber} — ${orderStatus}`,
           html: `
             <p>Hi ${order.user.name || "there"},</p>
@@ -212,6 +272,7 @@ exports.updateOrderStatus = async (req, res) => {
             }</p>
             ${order.orderNote ? `<p>Note from us: ${order.orderNote}</p>` : ""}
             <p>Order number: <strong>${order.orderNumber}</strong></p>
+            <p>Flucke Skincare</p>
           `,
         });
       } catch (mailErr) {
@@ -353,6 +414,8 @@ exports.verifyRazorpayPayment = async (req, res) => {
       total,
       coupon: couponId,
     });
+
+    await notifyAdminOfNewOrder(order._id);
 
     res.json({
       success: true,

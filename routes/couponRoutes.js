@@ -15,7 +15,7 @@ const fetchuser = require("../middleware/fetchUser");
 
 // Admin
 router.post("/", fetchuser, admin, createCoupon);
-router.get("/", fetchuser, admin, getCoupons);
+router.get("/", getCoupons);
 router.get("/:id", fetchuser, admin, getCoupon);
 router.put("/:id", fetchuser, admin, updateCoupon);
 router.delete("/:id", fetchuser, admin, deleteCoupon);
